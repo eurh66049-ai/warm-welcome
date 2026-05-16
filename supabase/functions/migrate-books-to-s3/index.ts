@@ -11,8 +11,8 @@ interface BookRow {
   id: string;
   cover_image_url: string | null;
   book_file_url: string | null;
-  original_cover_image_url: string | null;
-  original_book_file_url: string | null;
+  s3_cover_image_url: string | null;
+  s3_book_file_url: string | null;
 }
 
 async function getSignedPutUrl(objectKey: string, lovableKey: string, s3Key: string): Promise<string> {
@@ -87,26 +87,22 @@ async function migrateOne(
   let fileNew: string | undefined;
 
   // ---- COVER ----
-  if (isSupabaseUrl(book.cover_image_url)) {
+  if (isSupabaseUrl(book.cover_image_url) && !book.s3_cover_image_url) {
     try {
-      if (!book.original_cover_image_url) {
-        update.original_cover_image_url = book.cover_image_url;
-      }
       coverNew = await uploadToS3(book.cover_image_url!, "cover", lovableKey, s3Key);
-      update.cover_image_url = coverNew;
+      // Keep Supabase URL untouched in cover_image_url; store S3 URL separately.
+      update.s3_cover_image_url = coverNew;
     } catch (e) {
       errors.push(`cover: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
   // ---- FILE ----
-  if (isSupabaseUrl(book.book_file_url)) {
+  if (isSupabaseUrl(book.book_file_url) && !book.s3_book_file_url) {
     try {
-      if (!book.original_book_file_url) {
-        update.original_book_file_url = book.book_file_url;
-      }
       fileNew = await uploadToS3(book.book_file_url!, "file", lovableKey, s3Key);
-      update.book_file_url = fileNew;
+      // Keep Supabase URL untouched in book_file_url; store S3 URL separately.
+      update.s3_book_file_url = fileNew;
     } catch (e) {
       errors.push(`file: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -151,9 +147,12 @@ serve(async (req) => {
     // Find approved books still pointing at Supabase storage (cover OR file).
     const { data: books, error: selErr } = await supabase
       .from("book_submissions")
-      .select("id, cover_image_url, book_file_url, original_cover_image_url, original_book_file_url, file_size")
+      .select("id, cover_image_url, book_file_url, s3_cover_image_url, s3_book_file_url, file_size")
       .eq("status", "approved")
-      .or("cover_image_url.ilike.%supabase.co%,book_file_url.ilike.%supabase.co%")
+      .or(
+        "and(cover_image_url.ilike.%supabase.co%,s3_cover_image_url.is.null)," +
+        "and(book_file_url.ilike.%supabase.co%,s3_book_file_url.is.null)",
+      )
       .order("file_size", { ascending: true, nullsFirst: true })
       .limit(batchSize);
 
@@ -186,7 +185,10 @@ serve(async (req) => {
       .from("book_submissions")
       .select("id", { count: "exact", head: true })
       .eq("status", "approved")
-      .or("cover_image_url.ilike.%supabase.co%,book_file_url.ilike.%supabase.co%");
+      .or(
+        "and(cover_image_url.ilike.%supabase.co%,s3_cover_image_url.is.null)," +
+        "and(book_file_url.ilike.%supabase.co%,s3_book_file_url.is.null)",
+      );
 
     return new Response(
       JSON.stringify({ processed: results.length, success, failed, remaining: count ?? null, results }),
