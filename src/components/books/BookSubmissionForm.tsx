@@ -16,6 +16,7 @@ import { useAuthorSuggestions } from '@/hooks/useAuthorSuggestions';
 import MobileUploadGuidance from '@/components/upload/MobileUploadGuidance';
 import AuthorSuggestions from '@/components/books/AuthorSuggestions';
 import { mobileOptimizer } from '@/utils/mobileUploadOptimizer';
+import { uploadFileToS3 } from '@/utils/s3Client';
 
 
 // تم إزالة دالة normalizeAuthorBio
@@ -1508,6 +1509,9 @@ const BookSubmissionForm: React.FC<BookSubmissionFormProps> = ({ onSuccess }) =>
       // تهيئة روابط الملفات - استخدام الملفات الموجودة في حالة التعديل
       let coverImageUrl = (isEdit || isEditApproved) ? existingFiles.coverImageUrl : null;
       let bookFileUrl = (isEdit || isEditApproved) ? existingFiles.bookFileUrl : null;
+      // 🛡️ روابط Supabase الأصلية الدائمة (لا تتغير ولا تُستبدل بـ S3)
+      let originalCoverImageUrl: string | null = null;
+      let originalBookFileUrl: string | null = null;
       let actualFileSize = null;
       let detectedPageCount: number | null = null;
 
@@ -1544,33 +1548,50 @@ const BookSubmissionForm: React.FC<BookSubmissionFormProps> = ({ onSuccess }) =>
         const fileData = filesToUpload[i];
         uploadContextRef.current.fileIndex = i;
 
-        updateProgress(`${fileData.label}...`, 15 + (i / filesToUpload.length) * 70);
-        console.log(`🚀 بدء ${fileData.label} (${i + 1}/${filesToUpload.length})`);
+        updateProgress(`${fileData.label} إلى Supabase...`, 15 + (i / filesToUpload.length) * 70);
+        console.log(`🚀 بدء ${fileData.label} إلى Supabase (${i + 1}/${filesToUpload.length})`);
 
         try {
-          const url = await uploadFileUnified(fileData.file, fileData.bucket, fileData.folder);
+          // 1️⃣ الخطوة الأولى: رفع إلى Supabase Storage (الرابط الأصلي الدائم)
+          const supabaseUrl = await uploadFileUnified(fileData.file, fileData.bucket, fileData.folder);
+          console.log(`✅ تم الرفع إلى Supabase:`, supabaseUrl);
+
+          // 2️⃣ الخطوة الثانية: رفع نفس الملف إلى S3 (الرابط المُستخدم في العرض)
+          let finalUrl = supabaseUrl; // الافتراضي: استخدم Supabase إذا فشل S3
+          try {
+            updateProgress(`${fileData.label} إلى S3...`, 15 + ((i + 0.5) / filesToUpload.length) * 70);
+            console.log(`🚀 رفع ${fileData.label} إلى S3...`);
+            const { reference } = await uploadFileToS3(fileData.file, fileData.folder);
+            finalUrl = reference;
+            console.log(`✅ تم الرفع إلى S3:`, reference);
+          } catch (s3Error: any) {
+            console.warn(`⚠️ فشل رفع ${fileData.label} إلى S3، سنستخدم رابط Supabase:`, s3Error?.message);
+            // نُكمل بدون S3 - الرابط النهائي = رابط Supabase
+          }
 
           if (fileData.type === 'cover') {
-            coverImageUrl = url;
-            console.log('✅ تم رفع صورة الغلاف:', url);
+            originalCoverImageUrl = supabaseUrl;
+            coverImageUrl = finalUrl;
+            console.log('✅ غلاف - Supabase:', supabaseUrl, '| المستخدم:', finalUrl);
           } else if (fileData.type === 'book') {
-            bookFileUrl = url;
+            originalBookFileUrl = supabaseUrl;
+            bookFileUrl = finalUrl;
             actualFileSize = fileData.file.size;
-            console.log('✅ تم رفع ملف الكتاب:', url);
-            
-            // إضافة الشعار على ملفات PDF فقط
+            console.log('✅ كتاب - Supabase:', supabaseUrl, '| المستخدم:', finalUrl);
+
+            // إضافة الشعار على ملفات PDF فقط (يعمل على رابط Supabase)
             if (fileData.file.type === 'application/pdf' || fileData.file.name.toLowerCase().endsWith('.pdf')) {
               try {
                 updateProgress('إضافة شعار الموقع على PDF...', 15 + ((i + 0.9) / filesToUpload.length) * 70);
                 console.log('🎨 بدء إضافة الشعار على PDF...');
-                
+
                 const { data: watermarkResult, error: watermarkError } = await supabaseFunctions.functions.invoke('add-pdf-watermark', {
                   body: {
-                    pdfUrl: url,
+                    pdfUrl: supabaseUrl,
                     bucket: fileData.bucket
                   }
                 });
-                
+
                 if (watermarkError) {
                   console.error('⚠️ فشل إضافة الشعار على PDF:', watermarkError);
                   // نستمر بدون الشعار
@@ -1579,16 +1600,19 @@ const BookSubmissionForm: React.FC<BookSubmissionFormProps> = ({ onSuccess }) =>
                   typeof watermarkResult.watermarkedUrl === 'string' &&
                   /^https?:\/\//i.test(watermarkResult.watermarkedUrl)
                 ) {
-                  bookFileUrl = watermarkResult.watermarkedUrl;
-                  console.log('✅ تم إضافة الشعار على PDF بنجاح:', bookFileUrl);
-                  // حفظ عدد الصفحات المكتشف تلقائياً
+                  // تحديث رابط Supabase الأصلي بالنسخة المُختومة (لأنها بديل الأصل)
+                  originalBookFileUrl = watermarkResult.watermarkedUrl;
+                  // إذا فشل S3 من قبل، حدّث الرابط المستخدم أيضاً
+                  if (bookFileUrl === supabaseUrl) {
+                    bookFileUrl = watermarkResult.watermarkedUrl;
+                  }
+                  console.log('✅ تم إضافة الشعار على PDF بنجاح:', watermarkResult.watermarkedUrl);
                   if (watermarkResult?.pageCount) {
                     detectedPageCount = watermarkResult.pageCount;
                     console.log('📄 تم اكتشاف عدد الصفحات تلقائياً:', detectedPageCount);
                   }
                 } else {
                   console.warn('⚠️ نتيجة الشعار بدون رابط صالح، الاحتفاظ بالملف الأصلي:', watermarkResult);
-                  // الاحتفاظ بـ bookFileUrl الأصلي بعد الرفع
                   if (watermarkResult?.pageCount) {
                     detectedPageCount = watermarkResult.pageCount;
                   }
@@ -1684,6 +1708,9 @@ const BookSubmissionForm: React.FC<BookSubmissionFormProps> = ({ onSuccess }) =>
         page_count: detectedPageCount || null,
         cover_image_url: coverImageUrl,
         book_file_url: bookFileUrl,
+        // 🛡️ روابط Supabase الأصلية الدائمة (نسخة احتياطية لا تتغير)
+        original_cover_image_url: originalCoverImageUrl,
+        original_book_file_url: originalBookFileUrl,
         file_size: actualFileSize,
         file_type: bookFile?.type || 'application/pdf',
         upload_status: 'pending',
