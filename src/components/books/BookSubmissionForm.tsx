@@ -16,6 +16,7 @@ import { useAuthorSuggestions } from '@/hooks/useAuthorSuggestions';
 import MobileUploadGuidance from '@/components/upload/MobileUploadGuidance';
 import AuthorSuggestions from '@/components/books/AuthorSuggestions';
 import { mobileOptimizer } from '@/utils/mobileUploadOptimizer';
+import { uploadFileToS3 } from '@/utils/s3Client';
 
 
 // تم إزالة دالة normalizeAuthorBio
