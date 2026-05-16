@@ -789,6 +789,8 @@ export type Database = {
           reviewed_at: string | null
           reviewer_notes: string | null
           rights_confirmation: boolean | null
+          s3_book_file_url: string | null
+          s3_cover_image_url: string | null
           s3_migrated_at: string | null
           s3_migration_error: string | null
           slug: string | null
@@ -856,6 +858,8 @@ export type Database = {
           reviewed_at?: string | null
           reviewer_notes?: string | null
           rights_confirmation?: boolean | null
+          s3_book_file_url?: string | null
+          s3_cover_image_url?: string | null
           s3_migrated_at?: string | null
           s3_migration_error?: string | null
           slug?: string | null
@@ -923,6 +927,8 @@ export type Database = {
           reviewed_at?: string | null
           reviewer_notes?: string | null
           rights_confirmation?: boolean | null
+          s3_book_file_url?: string | null
+          s3_cover_image_url?: string | null
           s3_migrated_at?: string | null
           s3_migration_error?: string | null
           slug?: string | null
