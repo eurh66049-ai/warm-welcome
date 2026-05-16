@@ -147,7 +147,7 @@ export const useCachedBooks = () => {
   const fetchBooksFromDatabase = useCallback(async (page = 0): Promise<CachedBook[]> => {
     const { data, error } = await supabase
       .from('book_submissions')
-      .select('id, title, author, category, description, cover_image_url, views, rating, created_at, language, page_count, slug, display_type, book_file_type')
+      .select('id, title, author, category, description, cover_image_url, s3_cover_image_url, views, rating, created_at, language, page_count, slug, display_type, book_file_type')
       .eq('status', 'approved')
       .range(page * BOOKS_PER_PAGE, (page + 1) * BOOKS_PER_PAGE - 1)
       .order('id', { ascending: false });
@@ -156,26 +156,29 @@ export const useCachedBooks = () => {
       throw new Error('فشل في تحميل الكتب من قاعدة البيانات');
     }
 
-    return (data || []).map(book => ({
+    return (data || []).map(book => {
+      const cover = book.s3_cover_image_url || book.cover_image_url;
+      return ({
       id: book.id,
       title: book.title || 'عنوان غير متوفر',
       author: book.author || 'مؤلف غير معروف',
       category: book.category || 'أخرى',
       description: book.description || '',
-      cover_image: book.cover_image_url || '/placeholder.svg',
+      cover_image: cover || '/placeholder.svg',
       book_type: 'uploaded',
       views: book.views || 0,
       rating: book.rating || 0,
       is_free: true,
       created_at: book.created_at,
-      cover_image_url: book.cover_image_url || '/placeholder.svg',
-      optimized_cover_url: book.cover_image_url || '/placeholder.svg',
+      cover_image_url: cover || '/placeholder.svg',
+      optimized_cover_url: cover || '/placeholder.svg',
       language: book.language || 'العربية',
       page_count: book.page_count || 0,
       slug: book.slug || '',
       book_file_type: book.book_file_type || 'pdf',
       display_only: book.display_type === 'no_access'
-    }));
+    });
+    });
   }, []);
 
   // دالة لتحميل الكتب
