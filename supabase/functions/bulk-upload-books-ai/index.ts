@@ -1052,13 +1052,14 @@ async function upsertApprovedBook(book: InputBook, meta: AIBookMeta, supabaseCli
   }
 
   const watermarkResult = await addWatermarkIfPossible(uploadedBook.url, uploadedBook.extension);
-  let bookFileUrl = watermarkResult.url;
+  const bookFileUrl = watermarkResult.url;
+  const supabaseBookFileUrl = bookFileUrl;
+  const supabaseCoverUrl = coverUrl;
 
-  // 🪞 رفع نسخة إلى S3 واستخدام رابط S3 ككتاب أصلي (نحتفظ بنسخة Supabase كاحتياط)
+  // 🪞 رفع نسخة إلى S3 مع إبقاء روابط Supabase في أعمدتها الأصلية
   const s3Url = await mirrorSupabaseFileToS3(bookFileUrl);
   if (s3Url) {
     console.log(`[AI Bulk] ☁️ مرآة S3 (ملف): ${s3Url}`);
-    bookFileUrl = s3Url;
   } else {
     console.warn(`[AI Bulk] ⚠️ تعذر رفع نسخة S3 لملف "${title}" — سيُستخدم رابط Supabase مؤقتاً`);
   }
@@ -1067,7 +1068,6 @@ async function upsertApprovedBook(book: InputBook, meta: AIBookMeta, supabaseCli
   const s3CoverUrl = await mirrorSupabaseFileToS3(coverUrl);
   if (s3CoverUrl) {
     console.log(`[AI Bulk] ☁️ مرآة S3 (غلاف): ${s3CoverUrl}`);
-    coverUrl = s3CoverUrl;
   } else {
     console.warn(`[AI Bulk] ⚠️ تعذر رفع نسخة S3 لغلاف "${title}" — سيُستخدم رابط Supabase مؤقتاً`);
   }
@@ -1088,8 +1088,13 @@ async function upsertApprovedBook(book: InputBook, meta: AIBookMeta, supabaseCli
 
   const payload = {
     title,
-    cover_image_url: coverUrl,
-    book_file_url: bookFileUrl,
+    cover_image_url: supabaseCoverUrl,
+    book_file_url: supabaseBookFileUrl,
+    s3_cover_image_url: s3CoverUrl,
+    s3_book_file_url: s3Url,
+    original_cover_image_url: supabaseCoverUrl,
+    original_book_file_url: supabaseBookFileUrl,
+    s3_migrated_at: s3Url || s3CoverUrl ? new Date().toISOString() : null,
     source_cover_image_url: sourceCoverUrl,
     source_book_file_url: sourceBookUrl ? `${sourceBookUrl}#bulk-${crypto.randomUUID()}` : null,
     author: meta.author,

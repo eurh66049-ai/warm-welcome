@@ -16,7 +16,6 @@ import { useAuthorSuggestions } from '@/hooks/useAuthorSuggestions';
 import MobileUploadGuidance from '@/components/upload/MobileUploadGuidance';
 import AuthorSuggestions from '@/components/books/AuthorSuggestions';
 import { mobileOptimizer } from '@/utils/mobileUploadOptimizer';
-import { uploadFileToS3 } from '@/utils/s3Client';
 
 
 // تم إزالة دالة normalizeAuthorBio
@@ -1556,28 +1555,15 @@ const BookSubmissionForm: React.FC<BookSubmissionFormProps> = ({ onSuccess }) =>
           const supabaseUrl = await uploadFileUnified(fileData.file, fileData.bucket, fileData.folder);
           console.log(`✅ تم الرفع إلى Supabase:`, supabaseUrl);
 
-          // 2️⃣ الخطوة الثانية: رفع نفس الملف إلى S3 (الرابط المُستخدم في العرض)
-          let finalUrl = supabaseUrl; // الافتراضي: استخدم Supabase إذا فشل S3
-          try {
-            updateProgress(`${fileData.label} إلى S3...`, 15 + ((i + 0.5) / filesToUpload.length) * 70);
-            console.log(`🚀 رفع ${fileData.label} إلى S3...`);
-            const { reference } = await uploadFileToS3(fileData.file, fileData.folder);
-            finalUrl = reference;
-            console.log(`✅ تم الرفع إلى S3:`, reference);
-          } catch (s3Error: any) {
-            console.warn(`⚠️ فشل رفع ${fileData.label} إلى S3، سنستخدم رابط Supabase:`, s3Error?.message);
-            // نُكمل بدون S3 - الرابط النهائي = رابط Supabase
-          }
-
           if (fileData.type === 'cover') {
             originalCoverImageUrl = supabaseUrl;
-            coverImageUrl = finalUrl;
-            console.log('✅ غلاف - Supabase:', supabaseUrl, '| المستخدم:', finalUrl);
+            coverImageUrl = supabaseUrl;
+            console.log('✅ غلاف - Supabase محفوظ في cover_image_url:', supabaseUrl);
           } else if (fileData.type === 'book') {
             originalBookFileUrl = supabaseUrl;
-            bookFileUrl = finalUrl;
+            bookFileUrl = supabaseUrl;
             actualFileSize = fileData.file.size;
-            console.log('✅ كتاب - Supabase:', supabaseUrl, '| المستخدم:', finalUrl);
+            console.log('✅ كتاب - Supabase محفوظ في book_file_url:', supabaseUrl);
 
             // إضافة الشعار على ملفات PDF فقط (يعمل على رابط Supabase)
             if (fileData.file.type === 'application/pdf' || fileData.file.name.toLowerCase().endsWith('.pdf')) {
