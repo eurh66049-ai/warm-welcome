@@ -1,3 +1,1 @@
 project_id = "kydmyxsgyxeubhmqzrgo"
-[functions.migrate-books-to-s3]
-verify_jwt = false
