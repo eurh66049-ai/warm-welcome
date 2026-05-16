@@ -1708,6 +1708,9 @@ const BookSubmissionForm: React.FC<BookSubmissionFormProps> = ({ onSuccess }) =>
         page_count: detectedPageCount || null,
         cover_image_url: coverImageUrl,
         book_file_url: bookFileUrl,
+        // 🛡️ روابط Supabase الأصلية الدائمة (نسخة احتياطية لا تتغير)
+        original_cover_image_url: originalCoverImageUrl,
+        original_book_file_url: originalBookFileUrl,
         file_size: actualFileSize,
         file_type: bookFile?.type || 'application/pdf',
         upload_status: 'pending',
