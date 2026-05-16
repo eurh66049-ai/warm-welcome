@@ -478,11 +478,17 @@ const UserBookSubmissions: React.FC = () => {
                   {/* Book Cover */}
                   <div className="w-20 h-28 bg-muted flex-shrink-0 relative rounded-md overflow-hidden">
                     <img 
-                      src={submission.cover_image_url || '/src/assets/default-book-cover.png'} 
+                      src={(submission as any).s3_cover_image_url || submission.cover_image_url || '/src/assets/default-book-cover.png'} 
                       alt={submission.title} 
                       className="w-full h-full object-cover"
                       onError={(e) => {
-                        e.currentTarget.src = '/src/assets/default-book-cover.png';
+                        // Fallback إلى رابط Supabase الأصلي إذا فشل S3
+                        const fallback = submission.cover_image_url;
+                        if (fallback && e.currentTarget.src !== fallback) {
+                          e.currentTarget.src = fallback;
+                        } else {
+                          e.currentTarget.src = '/src/assets/default-book-cover.png';
+                        }
                       }}
                     />
                   </div>
